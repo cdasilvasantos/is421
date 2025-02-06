@@ -12,29 +12,20 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Checkout the repository code
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # Set up Node.js environment
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
           node-version: '16'
 
-      # Install dependencies
       - name: Install dependencies
         run: npm install
 
-      # Build the project
       - name: Build the project
         run: npm run build
 
-      # Install sshpass
-      - name: Install sshpass
-        run: sudo apt-get update && sudo apt-get install -y sshpass
-
-      # Configure SSH key
       - name: Configure SSH key
         run: |
           mkdir -p ~/.ssh
@@ -43,16 +34,15 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H 45.55.97.234 >> ~/.ssh/known_hosts
 
-      # Test SSH connection
       - name: Test SSH connection
         run: |
-          sshpass -p "${{ secrets.SUDO_PASSWORD }}" ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa root@45.55.97.234 "echo 'SSH connection successful'"
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa root@45.55.97.234 "echo 'SSH connection successful'"
 
-      # Set deployment directory based on branch
       - name: Set deployment directory
         id: set-deploy-dir
         run: |
-          case "${{ github.ref_name }}" in
+          BRANCH=$(echo "${{ github.ref }}" | awk -F'/' '{print $3}')
+          case "$BRANCH" in
             main)
               echo "DEPLOY_DIR=/var/www/production" >> $GITHUB_ENV ;;
             development)
@@ -60,11 +50,11 @@ jobs:
             QA)
               echo "DEPLOY_DIR=/var/www/qa" >> $GITHUB_ENV ;;
             *)
-              echo "Unknown branch: ${{ github.ref_name }}" >&2
+              echo "Unknown branch: $BRANCH" >&2
               exit 1 ;;
           esac
 
-      # Deploy files using rsync
       - name: Deploy to server
         run: |
-          rsync -avz --delete ./build/ root@45.55.97.234:${{ env.DEPLOY_DIR }}/
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa root@45.55.97.234 "mkdir -p ${{ env.DEPLOY_DIR }}"
+          rsync -avz --progress --exclude '.git' --exclude 'node_modules' ./build/ root@45.55.97.234:${{ env.DEPLOY_DIR }}/
